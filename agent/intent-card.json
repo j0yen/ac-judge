@@ -1,0 +1,122 @@
+{
+  "schema": "autobuilder.intent_card.v1",
+  "prd_source": "/home/jsy/wintermute/autobuilder/PRD-autobuilder-semantic-ac-judge.md",
+  "intent_slug": "ac-judge",
+  "root_motivation": "Mutation testing asks 'would the test catch a broken impl?'; nothing asks 'does the test even check the RIGHT thing?'. ac-judge closes the AC-text-vs-impl-semantics gap by having an independent model judge, per acceptance criterion, whether the paired test exercises the AC's stated behavior and asserts its invariant rather than tautologically restating the implementation's return.",
+  "user_persona": "The autobuilder /build pipeline (and Joe Yen running it), invoking `ac-judge run` as a 9th-receipt Stage-4 gate after a Rust crate's hard gates pass; also Joe running `ac-judge calibrate`/`show` by hand.",
+  "unfakeable_metric": {
+    "name": "ac_passing_count",
+    "lower_is_better": false,
+    "harness_command": "scripts/run-metrics.sh",
+    "target": null
+  },
+  "acceptance_criteria": [
+    {
+      "id": "AC4",
+      "level": "MUST",
+      "description": "Pair detection finds the test for an AC via three conventions: tests/ac<N>_*.rs filename, tests/acceptance_ac<N>.rs filename, and a #[test] fn whose name starts with ac<N>_ in any test file; first match wins, else unpaired. Tested with fixture crates for each convention.",
+      "test": "tests/acceptance_ac4.rs"
+    },
+    {
+      "id": "AC8",
+      "level": "MUST",
+      "description": "Missing $ANTHROPIC_API_KEY makes `ac-judge run` exit with code 6 immediately and attempt no network call.",
+      "test": "tests/acceptance_ac8.rs"
+    },
+    {
+      "id": "AC9",
+      "level": "MUST",
+      "description": "The receipt JSON written to target/autobuilder/ac-semantic-judge.json validates against schemas/ac-semantic-judge.schema.json, which is shipped in the repo.",
+      "test": "tests/acceptance_ac9.rs"
+    },
+    {
+      "id": "AC5",
+      "level": "MUST",
+      "description": "An AC with no paired test (unpaired) yields a verdict with behavior_match:no and reason 'no paired test found', and the run exits 4. This is pure pair-detection + verdict assembly, no network.",
+      "test": "tests/acceptance_ac5.rs"
+    },
+    {
+      "id": "AC7",
+      "level": "MUST",
+      "description": "The assembled Anthropic request carries the system block with cache_control {\"type\":\"ephemeral\"}; verifiable by inspecting the request body bytes the prompt module produces.",
+      "test": "tests/acceptance_ac7.rs"
+    },
+    {
+      "id": "AC1",
+      "level": "SHOULD",
+      "description": "DEFERRED to a network iter: `ac-judge run` against the agorabus crate produces a schema-valid verdict for each of its 5 declared ACs. Requires live Anthropic API; scaffolded as ignored test this iter.",
+      "test": "tests/acceptance_ac1.rs"
+    },
+    {
+      "id": "AC2",
+      "level": "SHOULD",
+      "description": "DEFERRED to a network iter: a restates-impl test pairing yields assertion_kind:restates-impl with confidence>=0.7 and exit 4.",
+      "test": "tests/acceptance_ac2.rs"
+    },
+    {
+      "id": "AC3",
+      "level": "SHOULD",
+      "description": "DEFERRED to a network iter: an asserts-invariant test pairing yields assertion_kind:asserts-invariant and exit 0.",
+      "test": "tests/acceptance_ac3.rs"
+    }
+  ],
+  "scope": [
+    "A single Rust CLI binary `ac-judge` with subcommands run/calibrate/show.",
+    "AC <-> test pair detection by filename and #[test] fn-name conventions.",
+    "Anthropic request assembly with a prompt-cached system block (ureq sync client).",
+    "Verdict + receipt JSON schema and a shipped JSON Schema file.",
+    "SHA-keyed verdict cache under target/autobuilder/ac-judge-cache/.",
+    "Exit-code contract: 0 pass, 4 AC failure, 6 missing API key."
+  ],
+  "non_goals": [
+    "The autobuilder self-mod / SKILL.md wiring (Artifact 5 / AC12) — deferred to a later tick.",
+    "Live calibration of the golden set against the API (AC6) and the perf/backfill ACs (AC10/AC11) — deferred to a network iter.",
+    "Streaming responses; any async runtime.",
+    "Sending anything beyond AC text + test source to the API."
+  ],
+  "hard_constraints": {
+    "rust_edition": "2024",
+    "target_kind": "cli",
+    "deny_unsafe": true,
+    "max_deps": 12,
+    "msrv": "1.85",
+    "additional": {
+      "default_model": "claude-sonnet-4-6",
+      "src_loc_budget": 500,
+      "test_loc_budget": 300
+    }
+  },
+  "five_whys_trace": [
+    {
+      "why": 1,
+      "q": "Why build a semantic AC judge when autobuilder already has cargo test + mutation + an adversarial sub-agent?",
+      "a": "Those all run inside the same session/model that wrote the impl and test; they verify the test catches a broken impl, not that the test checks the behavior the AC's English actually describes."
+    },
+    {
+      "why": 2,
+      "q": "Why does same-session verification miss AC-text-vs-impl-semantics mismatch?",
+      "a": "The edit-agent can write an impl that does X-with-a-quiet-Y and a test that asserts exactly what the impl returns; everything stays green while the AC's stated invariant is never checked."
+    },
+    {
+      "why": 3,
+      "q": "Why a separate binary with a different model rather than another prompt in-session?",
+      "a": "Independence is load-bearing: a clean context window and a different model family (Sonnet 4.6 vs the pipeline's Opus) is what catches the tautology; an in-session prompt shares the contaminated context."
+    },
+    {
+      "why": 4,
+      "q": "Why scaffold only the Rust portion and the no-network ACs this tick?",
+      "a": "build_target is mixed; the Mixed rule says do the Rust scaffold first and queue hooks/self-mod separately, and the network ACs need a live API key that isn't set in this environment, so they'd be flaky-by-construction in the loop."
+    }
+  ],
+  "ambiguities_resolved": [
+    {
+      "question": "Which ACs can be proven without the live Anthropic API this tick?",
+      "resolution": "AC4 (pair detection), AC5 (unpaired verdict), AC7 (cache_control in assembled request), AC8 (missing key exit 6), AC9 (schema validation) are MUST and network-free; AC1/AC2/AC3/AC6/AC10/AC11 need the API and are deferred/ignored."
+    },
+    {
+      "question": "Do we modify the autobuilder SKILL.md this tick?",
+      "resolution": "No — concurrent sibling /build branches use the skill; mutating it would race them. AC12 self-mod is queued for a later tick."
+    }
+  ],
+  "created_at": "2026-05-29T00:00:00Z"
+}
