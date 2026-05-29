@@ -1,0 +1,5 @@
+{
+  "ac_text": "the encoder is round-trip lossless for valid UTF-8",
+  "test_source": "#[test] fn ac8_roundtrip() { let s=\"h\u00e9llo\"; assert_eq!(decode(&encode(s)), s); }",
+  "label": "good"
+}

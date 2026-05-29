@@ -1,0 +1,5 @@
+{
+  "ac_text": "a missing config file falls back to the default port 8080",
+  "test_source": "#[test] fn ac5_default_port() { let c = load_or_default(\"/no/such\"); assert_eq!(c.port, 8080); }",
+  "label": "good"
+}

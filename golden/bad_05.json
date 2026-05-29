@@ -1,0 +1,5 @@
+{
+  "ac_text": "negative quantities are clamped to zero",
+  "test_source": "#[test] fn ac9_tauto() { assert_eq!(clamp_qty(-5), clamp_qty(-5)); }",
+  "label": "bad"
+}

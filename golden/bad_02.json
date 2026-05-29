@@ -1,0 +1,5 @@
+{
+  "ac_text": "the parser rejects empty input",
+  "test_source": "#[test] fn ac2_tauto() { let r = parse(\"\"); assert_eq!(r, parse(\"\")); }",
+  "label": "bad"
+}

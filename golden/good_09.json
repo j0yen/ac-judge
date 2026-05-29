@@ -1,0 +1,5 @@
+{
+  "ac_text": "negative quantities are clamped to zero",
+  "test_source": "#[test] fn ac9_clamp() { assert_eq!(clamp_qty(-5), 0); }",
+  "label": "good"
+}

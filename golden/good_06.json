@@ -1,0 +1,5 @@
+{
+  "ac_text": "duplicate keys are deduplicated, keeping the last value",
+  "test_source": "#[test] fn ac6_dedup_last() { let m = collapse(&[(\"k\",1),(\"k\",2)]); assert_eq!(m[\"k\"], 2); }",
+  "label": "good"
+}

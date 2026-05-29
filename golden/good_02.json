@@ -1,0 +1,5 @@
+{
+  "ac_text": "the parser rejects an empty input with an Err",
+  "test_source": "#[test] fn ac2_empty_rejected() { assert!(parse(\"\").is_err()); }",
+  "label": "good"
+}

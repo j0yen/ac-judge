@@ -1,0 +1,5 @@
+{
+  "ac_text": "the rate limiter blocks the 11th request and resets after one second",
+  "test_source": "#[test] fn ac10_partial() { let mut l=Limiter::new(10); for _ in 0..10 { l.allow(); } assert!(!l.allow()); }",
+  "label": "partial"
+}

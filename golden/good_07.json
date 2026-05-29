@@ -1,0 +1,5 @@
+{
+  "ac_text": "exit code is 4 when any AC fails the gate",
+  "test_source": "#[test] fn ac7_exit4() { let code = run_gate(&failing()); assert_eq!(code, 4); }",
+  "label": "good"
+}

@@ -1,0 +1,5 @@
+{
+  "ac_text": "default port is 8080",
+  "test_source": "#[test] fn ac5_tauto() { assert_eq!(load_or_default(\"/x\").port, load_or_default(\"/x\").port); }",
+  "label": "bad"
+}

@@ -1,0 +1,5 @@
+{
+  "ac_text": "output ends with the ESC/POS cut sequence",
+  "test_source": "#[test] fn ac1_tauto() { let out = render(); assert_eq!(out, render()); }",
+  "label": "bad"
+}

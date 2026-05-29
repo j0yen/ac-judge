@@ -1,0 +1,5 @@
+{
+  "ac_text": "the encoder is round-trip lossless and rejects invalid UTF-8",
+  "test_source": "#[test] fn ac8_partial() { let s=\"hi\"; assert_eq!(decode(&encode(s)), s); }",
+  "label": "partial"
+}

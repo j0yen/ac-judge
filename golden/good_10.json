@@ -1,0 +1,5 @@
+{
+  "ac_text": "the rate limiter blocks the 11th request within one second",
+  "test_source": "#[test] fn ac10_ratelimit() { let mut l=Limiter::new(10); for _ in 0..10 { assert!(l.allow()); } assert!(!l.allow()); }",
+  "label": "good"
+}

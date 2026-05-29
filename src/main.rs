@@ -167,10 +167,33 @@ fn write_receipt(crate_root: &Path, receipt: &Receipt) -> std::io::Result<()> {
 }
 
 fn calibrate(golden_set: &Path) -> ExitCode {
-    // Network-bound; deferred. Report the boundary rather than faking a pass.
+    // Load and validate the golden set offline. This is the pure portion of
+    // AC6: structure, labels, and counts are checked here; running the judge
+    // against each pair and computing the confusion matrix is network-bound
+    // and deferred to the network iteration.
+    let pairs = match ac_judge::calibrate::load_golden_set(golden_set) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("ac-judge: cannot load golden set: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    if pairs.is_empty() {
+        eprintln!("ac-judge: golden set {} is empty", golden_set.display());
+        return ExitCode::from(2);
+    }
+    let counts = ac_judge::calibrate::LabelCounts::tally(&pairs);
+    println!(
+        "ac-judge: golden set OK — {} pairs (good={}, bad={}, partial={})",
+        counts.total(),
+        counts.good,
+        counts.bad,
+        counts.partial
+    );
+    // AC6's confusion-matrix gate (FPR<0.10, FNR<0.20) requires running the
+    // judge against each pair; that network step is deferred this iteration.
     eprintln!(
-        "ac-judge: calibrate against {} is deferred to the network iteration (see PRD AC6)",
-        golden_set.display()
+        "ac-judge: confusion-matrix gate deferred to the network iteration (see PRD AC6)"
     );
     ExitCode::from(3)
 }

@@ -1,0 +1,5 @@
+{
+  "ac_text": "the checksum field equals the SHA-256 of the body",
+  "test_source": "#[test] fn ac4_checksum() { let r = build(b\"hi\"); assert_eq!(r.checksum, sha256_hex(b\"hi\")); }",
+  "label": "good"
+}

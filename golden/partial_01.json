@@ -1,0 +1,5 @@
+{
+  "ac_text": "output ends with the 4-byte cut sequence 0x1D 0x56 0x42 0x00",
+  "test_source": "#[test] fn ac1_partial() { let out = render(); assert_eq!(out[out.len()-1], 0x00); }",
+  "label": "partial"
+}
