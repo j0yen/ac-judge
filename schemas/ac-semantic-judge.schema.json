@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "autobuilder.ac_semantic_judge.v1",
+  "title": "Autobuilder AC Semantic Judge Receipt",
+  "description": "The 9th autobuilder receipt: per-AC verdicts from the semantic acceptance-criteria judge, written to target/autobuilder/ac-semantic-judge.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "prd_source",
+    "crate_root",
+    "model",
+    "prompt_version",
+    "generated_at",
+    "passed",
+    "verdicts"
+  ],
+  "properties": {
+    "schema": { "const": "autobuilder.ac_semantic_judge.v1" },
+    "prd_source": { "type": "string", "minLength": 1 },
+    "crate_root": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "prompt_version": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "passed": { "type": "boolean" },
+    "verdicts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verdict" }
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ac_id", "behavior_match", "assertion_kind", "confidence", "reasoning"],
+      "properties": {
+        "ac_id": { "type": "string", "pattern": "^AC[0-9]+$" },
+        "test_path": { "type": "string" },
+        "behavior_match": { "enum": ["yes", "no", "partial"] },
+        "assertion_kind": { "enum": ["asserts-invariant", "restates-impl", "mixed", "none"] },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "reasoning": { "type": "string" }
+      }
+    }
+  }
+}

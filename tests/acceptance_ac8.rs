@@ -13,10 +13,54 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
 
+use std::fs;
+use std::process::Command;
+use std::time::Instant;
+
+use tempfile::tempdir;
+
+/// AC8 — a missing `$ANTHROPIC_API_KEY` makes `ac-judge run` exit 6
+/// immediately, attempting no network call.
+///
+/// We assert the exit code is 6 and that the run returns near-instantly
+/// (well under any network round-trip), which together evidence "no network
+/// call attempted": the key guard short-circuits before the client is built.
 #[test]
 fn acceptance_ac8() {
-    // edit-agent: replace this stub with a real assertion. The
-    // panic keeps the test failing until you do, so the loop
-    // sees a real Stage 3 signal.
-    panic!("AC AC8 not yet implemented — see file header");
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("tests")).unwrap();
+    fs::write(root.join("tests/ac1_x.rs"), "#[test] fn ac1_x() {}").unwrap();
+    let prd = root.join("PRD.md");
+    fs::write(&prd, "- **AC1**: a thing happens.\n").unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_ac-judge");
+    let start = Instant::now();
+    let out = Command::new(bin)
+        .args(["run", "--prd"])
+        .arg(&prd)
+        .arg("--crate-root")
+        .arg(root)
+        .env_remove("ANTHROPIC_API_KEY")
+        .output()
+        .unwrap();
+    let elapsed = start.elapsed();
+
+    assert_eq!(
+        out.status.code(),
+        Some(6),
+        "missing API key must exit 6; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // A DNS+TLS+HTTP round-trip to api.anthropic.com would take far longer than
+    // this; sub-second strongly evidences that no network call was attempted.
+    assert!(
+        elapsed.as_secs() < 2,
+        "exit-6 path must be immediate (no network); took {elapsed:?}"
+    );
+    // And no receipt should have been written (we never got past the guard).
+    assert!(
+        !root.join("target/autobuilder/ac-semantic-judge.json").exists(),
+        "no receipt should be written when the key is missing"
+    );
 }

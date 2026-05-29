@@ -11,12 +11,50 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
+
+use std::ffi::OsStr;
+use std::fs;
+use std::path::PathBuf;
+
+use ac_judge::pair::pair_all;
+use tempfile::tempdir;
+
+/// Build a throwaway crate root with a single test file named `name`
+/// containing `body`, then pair a one-AC PRD against it. Returns the matched
+/// file name (path-prefix independent), or `None` when unpaired.
+fn pair_one(name: &str, body: &str) -> Option<PathBuf> {
+    let dir = tempdir().unwrap();
+    let tests = dir.path().join("tests");
+    fs::create_dir_all(&tests).unwrap();
+    fs::write(tests.join(name), body).unwrap();
+    let prd = "- **AC1**: the thing happens.\n";
+    let pairs = pair_all(prd, dir.path()).unwrap();
+    assert_eq!(pairs.len(), 1, "exactly one AC parsed");
+    pairs[0]
+        .test_path
+        .as_ref()
+        .map(|p| PathBuf::from(p.file_name().unwrap()))
+}
 
 #[test]
 fn acceptance_ac4() {
-    // edit-agent: replace this stub with a real assertion. The
-    // panic keeps the test failing until you do, so the loop
-    // sees a real Stage 3 signal.
-    panic!("AC AC4 not yet implemented — see file header");
+    // Convention 1: tests/ac<N>_*.rs filename.
+    let c1 = pair_one("ac1_basic.rs", "#[test] fn whatever() {}");
+    assert_eq!(c1.as_deref(), Some(OsStr::new("ac1_basic.rs").as_ref()));
+
+    // Convention 2: tests/acceptance_ac<N>.rs filename.
+    let c2 = pair_one("acceptance_ac1.rs", "#[test] fn whatever() {}");
+    assert_eq!(
+        c2.as_deref(),
+        Some(OsStr::new("acceptance_ac1.rs").as_ref())
+    );
+
+    // Convention 3: a #[test] fn whose name starts with ac<N>_ in any file.
+    let c3 = pair_one("smoke.rs", "#[test]\nfn ac1_does_the_thing() {}");
+    assert_eq!(c3.as_deref(), Some(OsStr::new("smoke.rs").as_ref()));
+
+    // No convention matches → unpaired.
+    let c4 = pair_one("unrelated.rs", "#[test] fn nope() {}");
+    assert_eq!(c4, None, "no convention matches → unpaired");
 }

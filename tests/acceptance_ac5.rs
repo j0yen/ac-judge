@@ -11,12 +11,60 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
 
+use std::fs;
+use std::process::Command;
+
+use tempfile::tempdir;
+
+/// AC5 — an AC with no paired test yields a `behavior_match: no` verdict with
+/// reason "no paired test found", and the run exits 4.
+///
+/// Pure pair-detection + verdict assembly, no network. We invoke the real
+/// binary with a non-empty (fake) API key so the AC8 key guard does not
+/// short-circuit; the paired AC is recorded as a deferred (partial) verdict
+/// with no network call, and the unpaired AC fails the gate.
 #[test]
 fn acceptance_ac5() {
-    // edit-agent: replace this stub with a real assertion. The
-    // panic keeps the test failing until you do, so the loop
-    // sees a real Stage 3 signal.
-    panic!("AC AC5 not yet implemented — see file header");
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("tests")).unwrap();
+    fs::write(root.join("tests/ac1_only.rs"), "#[test] fn ac1_x() {}").unwrap();
+
+    let prd = root.join("PRD.md");
+    fs::write(
+        &prd,
+        "## Acceptance criteria\n\n- **AC1**: first.\n- **AC2**: second, has no test.\n",
+    )
+    .unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_ac-judge");
+    let out = Command::new(bin)
+        .args(["run", "--prd"])
+        .arg(&prd)
+        .arg("--crate-root")
+        .arg(root)
+        .env("ANTHROPIC_API_KEY", "sk-test-not-real")
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "unpaired AC must fail the gate (exit 4); stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let receipt = fs::read_to_string(root.join("target/autobuilder/ac-semantic-judge.json"))
+        .expect("receipt written");
+    let v: serde_json::Value = serde_json::from_str(&receipt).unwrap();
+    let ac2 = v["verdicts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["ac_id"] == "AC2")
+        .expect("AC2 verdict present");
+    assert_eq!(ac2["behavior_match"], "no");
+    assert_eq!(ac2["reasoning"], "no paired test found");
 }

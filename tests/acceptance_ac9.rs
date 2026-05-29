@@ -11,12 +11,155 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
 
+use std::collections::BTreeSet;
+
+use ac_judge::schema::{AssertionKind, BehaviorMatch, Receipt, Verdict};
+use serde_json::Value;
+
+/// Load the shipped schema next to this crate.
+fn load_schema() -> Value {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/schemas/ac-semantic-judge.schema.json");
+    let body = std::fs::read_to_string(path).expect("schema file present in repo");
+    serde_json::from_str(&body).expect("schema is valid JSON")
+}
+
+/// Collect the keys of a JSON object as a set.
+fn keys(v: &Value) -> BTreeSet<String> {
+    v.as_object()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Validate `instance` against the (small, hand-rolled) subset of JSON-Schema
+/// the receipt schema uses: required keys, additionalProperties:false, const,
+/// enum, pattern, and numeric bounds. Panics with a descriptive message on the
+/// first violation. This avoids pulling a jsonschema crate (and its transitive
+/// deny surface) into the dependency tree for one test.
+fn validate(instance: &Value, schema: &Value, defs: &Value) {
+    // Resolve a local $ref into $defs.
+    let schema = if let Some(r) = schema.get("$ref").and_then(Value::as_str) {
+        let name = r.rsplit('/').next().unwrap();
+        &defs[name]
+    } else {
+        schema
+    };
+
+    if let Some(c) = schema.get("const") {
+        assert_eq!(instance, c, "const mismatch");
+    }
+    if let Some(en) = schema.get("enum").and_then(Value::as_array) {
+        assert!(en.contains(instance), "value {instance} not in enum {en:?}");
+    }
+    if let Some(pat) = schema.get("pattern").and_then(Value::as_str) {
+        let re = regex_lite(pat);
+        let s = instance.as_str().expect("string for pattern");
+        assert!(re(s), "value {s:?} does not match pattern {pat}");
+    }
+    if let Some(min) = schema.get("minimum").and_then(Value::as_f64) {
+        assert!(instance.as_f64().unwrap() >= min, "below minimum {min}");
+    }
+    if let Some(max) = schema.get("maximum").and_then(Value::as_f64) {
+        assert!(instance.as_f64().unwrap() <= max, "above maximum {max}");
+    }
+    if let Some(min_len) = schema.get("minLength").and_then(Value::as_u64) {
+        let s = instance.as_str().expect("string for minLength");
+        assert!(s.len() as u64 >= min_len, "below minLength {min_len}");
+    }
+
+    match schema.get("type").and_then(Value::as_str) {
+        Some("object") => {
+            // required
+            if let Some(req) = schema.get("required").and_then(Value::as_array) {
+                let present = keys(instance);
+                for r in req {
+                    let r = r.as_str().unwrap();
+                    assert!(present.contains(r), "missing required key {r}");
+                }
+            }
+            // additionalProperties:false
+            if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+                let allowed: BTreeSet<String> = schema["properties"]
+                    .as_object()
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
+                for k in keys(instance) {
+                    assert!(allowed.contains(&k), "unexpected additional property {k}");
+                }
+            }
+            // recurse into present properties
+            if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+                for (k, sub) in props {
+                    if let Some(child) = instance.get(k) {
+                        validate(child, sub, defs);
+                    }
+                }
+            }
+        }
+        Some("array") => {
+            if let Some(item_schema) = schema.get("items") {
+                for item in instance.as_array().expect("array") {
+                    validate(item, item_schema, defs);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Tiny anchored matcher for the two patterns the schema uses
+/// (`^AC[0-9]+$`). Avoids a regex dependency in the test.
+fn regex_lite(pat: &str) -> impl Fn(&str) -> bool + '_ {
+    move |s: &str| match pat {
+        "^AC[0-9]+$" => {
+            s.strip_prefix("AC")
+                .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+        }
+        other => panic!("unhandled test pattern {other}"),
+    }
+}
+
+/// AC9 — the receipt JSON validates against the shipped schema.
 #[test]
 fn acceptance_ac9() {
-    // edit-agent: replace this stub with a real assertion. The
-    // panic keeps the test failing until you do, so the loop
-    // sees a real Stage 3 signal.
-    panic!("AC AC9 not yet implemented — see file header");
+    let schema = load_schema();
+    let defs = schema["$defs"].clone();
+
+    // Build a representative receipt covering all three enum variants and an
+    // unpaired verdict.
+    let verdicts = vec![
+        Verdict {
+            ac_id: "AC1".to_owned(),
+            test_path: Some("tests/ac1_basic.rs".to_owned()),
+            behavior_match: BehaviorMatch::Yes,
+            assertion_kind: AssertionKind::AssertsInvariant,
+            confidence: 0.92,
+            reasoning: "asserts the PRD invariant on the result".to_owned(),
+        },
+        Verdict {
+            ac_id: "AC2".to_owned(),
+            test_path: Some("tests/ac2_x.rs".to_owned()),
+            behavior_match: BehaviorMatch::Partial,
+            assertion_kind: AssertionKind::Mixed,
+            confidence: 0.5,
+            reasoning: "covers part of the behavior".to_owned(),
+        },
+        Verdict::unpaired("AC3"),
+    ];
+    let receipt = Receipt::new(
+        "/tmp/PRD.md",
+        "/tmp/crate",
+        "claude-sonnet-4-6",
+        "2026-05-29T00:00:00Z",
+        verdicts,
+    );
+
+    let instance = serde_json::to_value(&receipt).expect("receipt serializes");
+    validate(&instance, &schema, &defs);
+
+    // Sanity: the unpaired verdict serialized without a test_path key
+    // (skip_serializing_if), which the schema permits (test_path optional).
+    let ac3 = instance["verdicts"][2].clone();
+    assert!(ac3.get("test_path").is_none(), "unpaired verdict omits test_path");
 }

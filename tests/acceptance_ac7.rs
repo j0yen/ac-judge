@@ -11,12 +11,36 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
 
+use ac_judge::prompt::build_request;
+
+/// AC7 — the assembled Anthropic request carries the system block with
+/// `cache_control: {"type": "ephemeral"}`. Inspect the request body the
+/// prompt module produces, end-to-end, including serialization to bytes.
 #[test]
 fn acceptance_ac7() {
-    // edit-agent: replace this stub with a real assertion. The
-    // panic keeps the test failing until you do, so the loop
-    // sees a real Stage 3 signal.
-    panic!("AC AC7 not yet implemented — see file header");
+    let req = build_request(
+        "claude-sonnet-4-6",
+        "output ends with the cut bytes",
+        "fn t() { assert_eq!(out.last4(), [0x1D, 0x56, 0x42, 0x00]); }",
+        "demo-crate",
+        1,
+    );
+
+    // Structural check on the value.
+    assert_eq!(
+        req["system"][0]["cache_control"]["type"], "ephemeral",
+        "system block must carry ephemeral cache_control"
+    );
+
+    // Byte-level check: the serialized request bytes contain the cache_control
+    // directive on the system block (AC7 says "verifiable by inspecting the
+    // request body bytes").
+    let bytes = serde_json::to_vec(&req).unwrap();
+    let body = String::from_utf8(bytes).unwrap();
+    assert!(
+        body.contains("\"cache_control\":{\"type\":\"ephemeral\"}"),
+        "serialized request bytes must contain the ephemeral cache_control; got: {body}"
+    );
 }
