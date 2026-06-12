@@ -1,10 +1,8 @@
 //! Sync Anthropic client (`ureq`) plus the verdict cache key.
-//!
-//! Network calls are deferred to a later autobuilder iteration; this module
-//! ships the request-sending surface and the SHA-keyed cache contract so the
-//! no-network ACs (key presence, cache key) can be proven now.
 
 use std::env;
+use std::fs;
+use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
@@ -67,6 +65,80 @@ pub fn cache_key(ac_text: &str, test_source: &str, model: &str) -> String {
         out.push_str(&format!("{byte:02x}"));
     }
     out
+}
+
+/// Send one AC + test pair to the Anthropic API and return a [`Verdict`].
+///
+/// Checks the on-disk SHA cache first; if found, returns the cached verdict.
+/// On a cache miss, sends the request and writes the result back to cache.
+///
+/// # Errors
+///
+/// Returns an error if the key is missing, the HTTP request fails, or the
+/// response body cannot be parsed.
+pub fn judge_one_ac(
+    api_key: &str,
+    model: &str,
+    ac_id: &str,
+    ac_text: &str,
+    test_path: Option<&str>,
+    test_source: &str,
+    crate_name: &str,
+    ac_index: u32,
+    cache_dir: &Path,
+) -> Result<crate::schema::Verdict, Error> {
+    let key = cache_key(ac_text, test_source, model);
+    let cache_file = cache_dir.join(format!("{key}.json"));
+
+    // Cache hit: return stored verdict.
+    if let Ok(cached) = fs::read_to_string(&cache_file) {
+        if let Ok(v) = serde_json::from_str::<crate::schema::Verdict>(&cached) {
+            return Ok(v);
+        }
+    }
+
+    // Cache miss: call the API.
+    let body = crate::prompt::build_request(model, ac_text, test_source, crate_name, ac_index);
+    let body_str = serde_json::to_string(&body)
+        .map_err(|e| Error::BadResponse(e.to_string()))?;
+
+    let response_text = ureq::post(ENDPOINT)
+        .set("x-api-key", api_key)
+        .set("anthropic-version", "2023-06-01")
+        .set("content-type", "application/json")
+        .set("anthropic-beta", "prompt-caching-2024-07-31")
+        .send_string(&body_str)
+        .map_err(|e| Error::Transport(e.to_string()))
+        .and_then(|resp| {
+            resp.into_string()
+                .map_err(|e| Error::Transport(e.to_string()))
+        })?;
+
+    // Extract the text content from the Anthropic response envelope.
+    let reply_text = extract_content_text(&response_text)
+        .ok_or_else(|| Error::BadResponse(format!("no text content in: {response_text}")))?;
+
+    let verdict = parse_verdict(ac_id, test_path.map(str::to_owned), &reply_text)?;
+
+    // Write to cache (best-effort; failures are non-fatal).
+    if let Ok(json) = serde_json::to_string_pretty(&verdict) {
+        let _ = fs::create_dir_all(cache_dir);
+        let _ = fs::write(&cache_file, json);
+    }
+
+    Ok(verdict)
+}
+
+/// Extract `content[0].text` from an Anthropic Messages API response.
+fn extract_content_text(response_body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(response_body).ok()?;
+    v.get("content")?
+        .as_array()?
+        .iter()
+        .find(|block| block.get("type").and_then(|t| t.as_str()) == Some("text"))
+        .and_then(|block| block.get("text"))
+        .and_then(|t| t.as_str())
+        .map(str::to_owned)
 }
 
 /// Parse the model's strict-JSON reply text into a [`Verdict`] for `ac_id`.
