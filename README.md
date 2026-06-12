@@ -1,5 +1,9 @@
 # ac-judge
 
+**TL;DR:** `ac-judge run --prd <prd> --crate-root <dir>` pairs each PRD acceptance criterion to its Rust test file, sends both to Claude Sonnet 4.6, and asks whether the test actually exercises the AC's stated behavior. Exits 4 if any AC is tautological or unpaired. Emits a Stage-4 autobuilder receipt at `target/autobuilder/ac-semantic-judge.json`.
+
+---
+
 A small Rust CLI that judges whether each acceptance-criterion (AC) test
 actually *exercises the behavior its AC describes* — a semantic check that
 complements mutation testing.
