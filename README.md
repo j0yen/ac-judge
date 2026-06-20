@@ -1,33 +1,15 @@
 # ac-judge
 
-**TL;DR:** `ac-judge run --prd <prd> --crate-root <dir>` pairs each PRD acceptance criterion to its Rust test file, sends both to Claude Sonnet 4.6, and asks whether the test actually exercises the AC's stated behavior. Exits 4 if any AC is tautological or unpaired. Emits a Stage-4 autobuilder receipt at `target/autobuilder/ac-semantic-judge.json`.
+A Rust CLI that asks, for each acceptance criterion in a PRD, whether the test claiming to verify it actually exercises the behavior the AC describes.
 
----
+Mutation testing and semantic judging answer different questions. Mutation testing asks whether a test would catch a broken implementation. `ac-judge` asks the question before that one: does the test check the right thing at all? A test can survive every mutant and still be tautological — calling the function and asserting it returned what it returned. That test proves nothing about the AC, and nothing downstream will tell you so. `ac-judge` reads the AC's English and the test's source together and decides whether the second is really evidence for the first.
 
-A small Rust CLI that judges whether each acceptance-criterion (AC) test
-actually *exercises the behavior its AC describes* — a semantic check that
-complements mutation testing.
-
-Mutation testing asks: "would the test catch a broken impl?"
-`ac-judge` asks the orthogonal question: "does the test even check the
-**right thing**?"
-
-It pairs each AC's English text with the test file that claims to verify it,
-sends both to Claude (Sonnet 4.6 by default, with a prompt-cached system
-block), and asks two strict questions:
+It pairs each AC with its test, sends both to Claude (`claude-sonnet-4-6` by default), and asks two strict questions:
 
 1. Does the test exercise the behavior the AC describes? (`behavior_match`)
-2. Is the test asserting the AC's stated invariant, or merely re-running the
-   impl and confirming its return? (`assertion_kind`)
+2. Is the test asserting the AC's stated invariant, or merely re-running the implementation and confirming its own return? (`assertion_kind`)
 
-Verdicts land in a 9th autobuilder receipt at
-`target/autobuilder/ac-semantic-judge.json`. The autobuilder Stage 4 gate
-blocks if any AC has `behavior_match: no` **or**
-`assertion_kind: restates-impl` with `confidence >= 0.7`.
-
-The judge model is **intentionally a different family** from the autobuilder
-pipeline default (Opus): the same model that wrote a test should not also
-judge whether that test verifies its AC. The independence is load-bearing.
+The judge model is deliberately a different family from the autobuilder's default (Opus). The model that wrote a test should not be the one deciding whether that test verifies its AC — the independence is the whole point.
 
 ## Install
 
@@ -42,63 +24,60 @@ cargo install --path .
 ```sh
 # Judge every AC in a PRD against the crate's tests.
 ac-judge run --prd <path/to/PRD.md> --crate-root <path/to/crate> [--model <id>]
-#   exit 0  → all ACs pass the judge
-#   exit 4  → an AC failed the gate (behavior_match:no OR restates-impl, conf>=0.7)
-#   exit 6  → $ANTHROPIC_API_KEY unset (no network attempted)
 
-# Run the judge against a hand-curated golden set; report the confusion matrix.
+# Check the judge against a hand-curated golden set; report the confusion matrix.
 ac-judge calibrate --golden-set golden/
 
 # Pretty-print one verdict from the most recent run.
 ac-judge show --slug AC1 --crate-root <path/to/crate>
 ```
 
-## Pair detection
+`run` exits:
 
-For a PRD with numbered ACs (`**AC1**: ...`), each AC is paired to its test by
-these heuristics (first match wins):
+- `0` — every AC passed the judge.
+- `4` — an AC failed the gate: `behavior_match: no`, or `assertion_kind: restates-impl` with `confidence >= 0.7`.
+- `6` — `$ANTHROPIC_API_KEY` is unset. The check runs before any network call, so a missing key never costs a request.
 
-1. `tests/ac<N>_*.rs` — today's autobuilder convention.
-2. `tests/acceptance_ac<N>.rs` — older convention (agorabus, episodic-observer).
-3. A `#[test]` function whose name starts with `ac<N>_` in any test file.
-4. Falls through to `unpaired` → recorded with
-   `behavior_match: no, reason: "no paired test found"`.
+## How pairing works
 
-## Verdict schema
+For a PRD with numbered ACs (`**AC1**: ...`), each AC is matched to a test by these rules, first match wins:
 
-Each verdict is strict JSON conforming to
-`schemas/ac-semantic-judge.schema.json`:
+1. `tests/ac<N>_*.rs` — the current autobuilder convention.
+2. `tests/acceptance_ac<N>.rs` — the older convention (agorabus, episodic-observer).
+3. A `#[test]` whose name starts with `ac<N>_`, in any test file.
+4. Otherwise `unpaired`, recorded as `behavior_match: no, reason: "no paired test found"`.
+
+## The verdict
+
+Each verdict is strict JSON against `schemas/ac-semantic-judge.schema.json`:
 
 ```json
 {
   "ac_id": "AC1",
   "test_path": "tests/ac1_basic.rs",
-  "behavior_match": "yes" | "no" | "partial",
-  "assertion_kind": "asserts-invariant" | "restates-impl" | "mixed",
+  "behavior_match": "yes | no | partial",
+  "assertion_kind": "asserts-invariant | restates-impl | mixed",
   "confidence": 0.0,
   "reasoning": "<1-2 sentences>"
 }
 ```
 
-- `asserts-invariant` — the test asserts a property the AC's English
-  describes (e.g. "output ends with cut bytes" → asserts the last bytes are
-  `0x1D 0x56 0x42 0x00`).
-- `restates-impl` — the test calls the function and asserts the function
-  returned what the function returned (tautological).
+`asserts-invariant` means the test checks a property the AC's English actually states — "output ends with cut bytes" becomes an assertion that the last bytes are `0x1D 0x56 0x42 0x00`. `restates-impl` means the test calls the function and asserts it returned what it returned. The first is evidence; the second is a tautology wearing a test's clothes.
 
-## Cost
+Verdicts are collected into a receipt at `target/autobuilder/ac-semantic-judge.json` — the ninth receipt in the autobuilder's risk gate. Stage 4 blocks the build on any failing AC.
 
-Cached system + few-shot drives cost to ~$0.005/AC at Sonnet rates. Per-crate
-cost (10 ACs avg): ~$0.05. Re-running on an identical AC + test (same SHA256
-of `ac_text + test_source + model + prompt_version`) returns a cached verdict
-from `target/autobuilder/ac-judge-cache/` — no second API call.
+## Cost and caching
+
+A cached system block plus few-shot examples keeps a judgment at roughly $0.005 per AC at Sonnet rates — about $0.05 for a ten-AC crate. Re-running on an unchanged AC and test (same SHA-256 of `ac_text + test_source + model + prompt_version`) returns the cached verdict from `target/autobuilder/ac-judge-cache/` without a second call.
 
 ## Privacy
 
-Only the AC text and the paired test source are sent to the API — never the
-rest of the PRD body, the journal, or the environment.
+Only the AC text and its paired test source go to the API. The rest of the PRD body, the journal, and the environment do not.
+
+## Where it fits
+
+`ac-judge` is the semantic gate inside the autobuilder pipeline — the ninth proof receipt alongside the mutation, coverage, and clippy gates. It runs at Stage 4, after the tests are written and before the build is allowed to claim it proved anything.
 
 ## License
 
-Dual-licensed under either of [MIT](LICENSE-MIT) or
-[Apache-2.0](LICENSE-APACHE) at your option.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
