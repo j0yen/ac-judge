@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC18",
+  "behavior_match": "partial",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.7,
+  "reasoning": "The test correctly checks that the 11th request is blocked, but it does not test the reset-after-one-second behavior described in AC18. Only half of the acceptance criterion is verified."
+}

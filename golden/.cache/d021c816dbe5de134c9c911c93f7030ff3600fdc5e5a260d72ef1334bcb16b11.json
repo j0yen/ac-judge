@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC11",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.95,
+  "reasoning": "The test creates a map with duplicate key 'k' having values 1 and 2, then asserts the last value (2) is kept, directly verifying the AC11 behavior of deduplication keeping the last value."
+}

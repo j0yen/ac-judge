@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC15",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.7,
+  "reasoning": "The test verifies that after 10 allowed requests the 11th is blocked, which matches the AC description of blocking the 11th request within one second. However, the test is named ac10 not ac15, and doesn't explicitly test the time window constraint (one second), only the count limit."
+}

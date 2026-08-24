@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC1",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.98,
+  "reasoning": "The test merely calls render() twice and asserts the outputs are equal to each other, which is a tautology. It never checks that the output ends with the ESC/POS cut sequence bytes."
+}

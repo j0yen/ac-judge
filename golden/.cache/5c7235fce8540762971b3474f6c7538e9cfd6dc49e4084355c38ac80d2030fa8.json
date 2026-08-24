@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC16",
+  "behavior_match": "partial",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.7,
+  "reasoning": "The test only checks the last byte is 0x00, but the AC requires all 4 bytes 0x1D 0x56 0x42 0x00 at the end. It partially covers the invariant but misses the first three bytes of the cut sequence."
+}

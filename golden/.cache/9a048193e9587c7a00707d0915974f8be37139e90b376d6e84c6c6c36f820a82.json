@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC19",
+  "behavior_match": "partial",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.72,
+  "reasoning": "The test verifies that duplicate keys keep the last value, which matches part of AC19, but it does not verify that order is stable (the second part of the criterion). Only half of the acceptance criterion is tested."
+}

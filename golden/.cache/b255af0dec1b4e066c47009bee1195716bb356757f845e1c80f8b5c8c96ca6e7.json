@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC5",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.98,
+  "reasoning": "The test is purely tautological—it asserts that clamp_qty(-5) equals itself, which tells us nothing about whether negative quantities are actually clamped to zero. It should assert clamp_qty(-5) == 0."
+}

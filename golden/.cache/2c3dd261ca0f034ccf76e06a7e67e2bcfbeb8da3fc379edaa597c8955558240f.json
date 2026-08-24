@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC9",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.85,
+  "reasoning": "The test directly verifies that the checksum field equals the SHA-256 of the body content, which matches the AC description. The test name says 'ac4' but the behavior being tested aligns with AC9's requirement."
+}

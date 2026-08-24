@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC3",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.97,
+  "reasoning": "The test compares the checksum of two identical calls to `build`, which is a tautological self-comparison and never verifies that the checksum equals the SHA-256 of the body. It does not compute an expected SHA-256 value and compare against it."
+}

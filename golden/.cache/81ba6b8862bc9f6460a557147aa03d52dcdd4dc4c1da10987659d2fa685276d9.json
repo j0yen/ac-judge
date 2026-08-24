@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC14",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.7,
+  "reasoning": "The test checks that a negative quantity (-5) is clamped to zero, which directly matches the AC's description of negative quantities being clamped to zero. The test name says ac9 but the behavior matches AC14's description."
+}

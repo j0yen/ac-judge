@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC8",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.82,
+  "reasoning": "The test verifies that consecutive elements in the list output have non-decreasing timestamps (ascending order), which matches the AC's requirement that list output is sorted ascending by timestamp. However, the test is named 'ac3_sorted' while the AC is AC8, suggesting a possible mismatch in AC numbering."
+}

@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC7",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.85,
+  "reasoning": "The test calls parse(\"\") and asserts the result is Err, which directly verifies that empty input is rejected with an Err as described in AC7. The test name says ac2 but the behavior matches AC7's description."
+}

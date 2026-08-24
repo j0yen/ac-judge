@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC10",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.82,
+  "reasoning": "The test verifies that loading from a non-existent path results in port 8080, which matches the AC describing fallback to default port 8080 on missing config file. Minor uncertainty due to test being named 'ac5' while reviewing 'AC10', but the behavior tested aligns with the criterion."
+}

@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC17",
+  "behavior_match": "partial",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.85,
+  "reasoning": "The test checks ascending sort order (invariant), but does not verify the no-duplicates requirement from the AC. The test name also says 'ac3_partial' rather than AC17, suggesting it's incomplete coverage."
+}

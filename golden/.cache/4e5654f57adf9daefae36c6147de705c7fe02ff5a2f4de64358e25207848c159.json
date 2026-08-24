@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC4",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.98,
+  "reasoning": "The test asserts that `load_or_default('/x').port` equals itself, which is a tautology and never checks that the default port is 8080. It also appears to be labeled AC5 rather than AC4."
+}

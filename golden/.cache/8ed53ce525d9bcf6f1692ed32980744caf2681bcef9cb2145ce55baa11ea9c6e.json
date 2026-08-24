@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC20",
+  "behavior_match": "partial",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.6,
+  "reasoning": "The test verifies round-trip lossless encoding/decoding (matching part of the AC), but it uses a trivial 2-character ASCII string and completely omits testing rejection of invalid UTF-8, which is the second half of the AC requirement."
+}

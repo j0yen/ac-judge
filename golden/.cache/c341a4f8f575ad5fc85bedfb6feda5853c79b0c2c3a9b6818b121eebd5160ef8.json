@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC12",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.75,
+  "reasoning": "The test is named 'ac7_exit4' but claims to verify AC12 (exit code 4 when any AC fails the gate). The test does check that exit code is 4 when a failing gate is run, which matches the AC's described behavior, but the test name references AC7 rather than AC12, suggesting a possible mismatch or copy-paste error between the test and the AC being verified."
+}

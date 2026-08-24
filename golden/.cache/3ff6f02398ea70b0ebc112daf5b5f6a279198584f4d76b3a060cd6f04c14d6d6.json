@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC2",
+  "behavior_match": "no",
+  "assertion_kind": "restates-impl",
+  "confidence": 0.99,
+  "reasoning": "The test calls parse(\"\") and asserts it equals parse(\"\"), which is a tautology that never checks whether the parser actually rejects empty input. It does not assert an error or Err result."
+}

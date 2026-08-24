@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC6",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.95,
+  "reasoning": "The test directly checks that the last 4 bytes of the output match the ESC/POS cut sequence 0x1D 0x56 0x42 0x00, which exactly matches the AC's description. The only minor concern is the test is named ac1 but claims to verify AC6, though the assertion itself is correct."
+}

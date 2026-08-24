@@ -1,0 +1,7 @@
+{
+  "ac_id": "AC13",
+  "behavior_match": "yes",
+  "assertion_kind": "asserts-invariant",
+  "confidence": 0.72,
+  "reasoning": "The test encodes then decodes a UTF-8 string and asserts the result equals the original, directly verifying round-trip losslessness for valid UTF-8. However, the test is labeled ac8 not ac13, raising slight uncertainty about whether it truly targets AC13 specifically."
+}
