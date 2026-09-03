@@ -87,6 +87,8 @@ pub struct Receipt {
     pub prd_source: String,
     /// Path to the crate root that was judged.
     pub crate_root: String,
+    /// The backend that produced the verdicts (`"codex" | "api" | "claude-cli"`).
+    pub backend: String,
     /// The model that produced the verdicts.
     pub model: String,
     /// The prompt/schema version stamped into the cache key.
@@ -105,9 +107,11 @@ pub const RECEIPT_SCHEMA: &str = "autobuilder.ac_semantic_judge.v1";
 impl Receipt {
     /// Assemble a receipt from its verdicts, computing `passed`.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         prd_source: impl Into<String>,
         crate_root: impl Into<String>,
+        backend: impl Into<String>,
         model: impl Into<String>,
         generated_at: impl Into<String>,
         verdicts: Vec<Verdict>,
@@ -117,6 +121,7 @@ impl Receipt {
             schema: RECEIPT_SCHEMA.to_owned(),
             prd_source: prd_source.into(),
             crate_root: crate_root.into(),
+            backend: backend.into(),
             model: model.into(),
             prompt_version: crate::PROMPT_VERSION.to_owned(),
             generated_at: generated_at.into(),

@@ -1,10 +1,13 @@
-//! System + few-shot Anthropic request assembly.
+//! Shared system text + per-AC user content, plus Anthropic request assembly.
 //!
-//! The system block is marked `cache_control: {"type": "ephemeral"}` so it is
-//! prompt-cached across the many per-AC calls in one run. The ephemeral
-//! per-AC content (AC text + test source) goes in the user message.
+//! [`SYSTEM_TEXT`] and [`build_user_content`] are the words every backend
+//! sends — codex and claude-cli receive them as-is (system, blank line, user
+//! content on stdin / as the prompt); the `api` backend additionally wraps
+//! them into an Anthropic Messages request via [`build_request_from_parts`],
+//! whose system block is marked `cache_control: {"type": "ephemeral"}` so it
+//! is prompt-cached across the many per-AC calls in one run.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The cached system instruction block (~1500 input tokens with few-shot).
 pub const SYSTEM_TEXT: &str = "You are an independent reviewer judging whether a Rust test \
@@ -18,23 +21,54 @@ Answer in strict JSON only:\n\n\
 \"restates-impl\" means the test calls the function and asserts the function returned what the \
 function returned (tautological).";
 
+/// Build the per-AC user-message content: AC English text + test source.
+///
+/// Every backend sends exactly these words as its "user" turn (system text
+/// is [`SYSTEM_TEXT`], shared verbatim), so a verdict differs across
+/// backends only because of the model, not the prompt.
+#[must_use]
+pub fn build_user_content(
+    ac_text: &str,
+    test_source: &str,
+    crate_name: &str,
+    ac_index: u32,
+) -> String {
+    format!(
+        "Crate: {crate_name}\nAcceptance criterion: AC{ac_index}\n\nAC English text:\n{ac_text}\n\n\
+Test source:\n```rust\n{test_source}\n```\n\nReturn the strict JSON verdict only."
+    )
+}
+
 /// Build the JSON request body for the Anthropic Messages API for one AC.
 ///
 /// `max_tokens` is small because the model must reply with only the strict
 /// JSON verdict.
 #[must_use]
-pub fn build_request(model: &str, ac_text: &str, test_source: &str, crate_name: &str, ac_index: u32) -> Value {
-    let user_content = format!(
-        "Crate: {crate_name}\nAcceptance criterion: AC{ac_index}\n\nAC English text:\n{ac_text}\n\n\
-Test source:\n```rust\n{test_source}\n```\n\nReturn the strict JSON verdict only."
-    );
+pub fn build_request(
+    model: &str,
+    ac_text: &str,
+    test_source: &str,
+    crate_name: &str,
+    ac_index: u32,
+) -> Value {
+    let user_content = build_user_content(ac_text, test_source, crate_name, ac_index);
+    build_request_from_parts(model, SYSTEM_TEXT, &user_content)
+}
+
+/// Build the JSON request body for the Anthropic Messages API from an
+/// already-assembled system + user turn.
+///
+/// Used by the `api` backend, which receives `system`/`user` through the
+/// [`crate::backend::Backend`] trait rather than the raw AC/test parts.
+#[must_use]
+pub fn build_request_from_parts(model: &str, system: &str, user_content: &str) -> Value {
     json!({
         "model": model,
         "max_tokens": 512,
         "system": [
             {
                 "type": "text",
-                "text": SYSTEM_TEXT,
+                "text": system,
                 "cache_control": { "type": "ephemeral" }
             }
         ],

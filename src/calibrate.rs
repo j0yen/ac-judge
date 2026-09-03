@@ -36,7 +36,9 @@ impl Label {
             "good" => Ok(Self::Good),
             "bad" => Ok(Self::Bad),
             "partial" => Ok(Self::Partial),
-            other => Err(format!("unknown label {other:?} (expected good|bad|partial)")),
+            other => Err(format!(
+                "unknown label {other:?} (expected good|bad|partial)"
+            )),
         }
     }
 }

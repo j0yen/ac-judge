@@ -2,8 +2,13 @@
 //!
 //! See the crate-level docs in `lib.rs` for the design. This binary wires the
 //! `run` / `calibrate` / `show` subcommands and owns the exit-code contract:
-//! 0 = all ACs pass, 4 = an AC failed the gate, 6 = `$ANTHROPIC_API_KEY`
-//! unset.
+//! 0 = all ACs pass, 4 = an AC failed the gate, 6 = no judge backend
+//! available (`codex login`, `$ANTHROPIC_API_KEY`, or `claude login` — all
+//! three were checked and none worked, or the single explicitly requested
+//! `--backend` didn't; the diagnostic on stderr says which). `--backend
+//! auto|codex|api|claude-cli` (default `auto`) picks the judge's model
+//! backend; `auto` prefers codex, then the Anthropic API, then the Claude
+//! CLI, and never silently substitutes when a backend is named explicitly.
 
 // A CLI prints to stdout/stderr by design; allow it in this binary only.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -14,13 +19,17 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use ac_judge::api::{self, judge_one_ac, require_api_key};
+use ac_judge::backend::{self, Backend, Check, Requested, judge_one_ac};
+use ac_judge::exit;
 use ac_judge::pair::{self, Pair};
 use ac_judge::schema::{Receipt, Verdict};
-use ac_judge::{exit, DEFAULT_MODEL};
 
 #[derive(Parser)]
-#[command(name = "ac-judge", version, about = "Semantic acceptance-criteria judge")]
+#[command(
+    name = "ac-judge",
+    version,
+    about = "Semantic acceptance-criteria judge"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -36,15 +45,26 @@ enum Command {
         /// Path to the crate root whose `tests/` are judged.
         #[arg(long)]
         crate_root: PathBuf,
-        /// Override the judge model.
-        #[arg(long, default_value = DEFAULT_MODEL)]
-        model: String,
+        /// Which judge backend to use. `auto` tries codex, then api, then
+        /// claude-cli; an explicit choice never falls back.
+        #[arg(long, default_value = "auto")]
+        backend: String,
+        /// Override the judge model. Defaults to the selected backend's own
+        /// pinned default when omitted.
+        #[arg(long)]
+        model: Option<String>,
     },
     /// Run the judge against a golden set and report the confusion matrix.
     Calibrate {
         /// Directory of hand-curated AC-↔-test pairs.
         #[arg(long)]
         golden_set: PathBuf,
+        /// Which judge backend to use. Same resolution as `run`.
+        #[arg(long, default_value = "auto")]
+        backend: String,
+        /// Override the judge model.
+        #[arg(long)]
+        model: Option<String>,
     },
     /// Pretty-print one verdict from the most recent run.
     Show {
@@ -63,22 +83,56 @@ fn main() -> ExitCode {
         Command::Run {
             prd,
             crate_root,
+            backend,
             model,
-        } => run(&prd, &crate_root, &model),
-        Command::Calibrate { golden_set } => calibrate(&golden_set),
+        } => run(&prd, &crate_root, &backend, model.as_deref()),
+        Command::Calibrate {
+            golden_set,
+            backend,
+            model,
+        } => calibrate(&golden_set, &backend, model.as_deref()),
         Command::Show { slug, crate_root } => show(&slug, &crate_root),
     }
 }
 
-fn run(prd: &Path, crate_root: &Path, model: &str) -> ExitCode {
-    // AC8: the missing-key check must come before any network attempt.
-    let api_key = match require_api_key() {
-        Ok(k) => k,
-        Err(_) => {
-            eprintln!("ac-judge: ${} is unset; refusing to run (no network attempted)", api::API_KEY_ENV);
-            return ExitCode::from(exit::NO_API_KEY);
+/// Parse `--backend` or print the parse error and return exit 2.
+fn parse_backend(raw: &str) -> Result<Requested, ExitCode> {
+    Requested::parse(raw).map_err(|e| {
+        eprintln!("ac-judge: {e}");
+        ExitCode::from(2)
+    })
+}
+
+/// Print the "no judge backend available" diagnostic: one line per check.
+fn print_no_backend(checks: &[Check]) {
+    eprintln!("ac-judge: no judge backend available; checked:");
+    for c in checks {
+        eprintln!("  {c}");
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn run(prd: &Path, crate_root: &Path, backend_flag: &str, model: Option<&str>) -> ExitCode {
+    let requested = match parse_backend(backend_flag) {
+        Ok(r) => r,
+        Err(code) => return code,
+    };
+
+    // AC4/AC6: backend resolution happens before anything else — no PRD
+    // read, no pairing, no directory write — so an unavailable backend never
+    // costs a network call or leaves target/autobuilder/ touched.
+    let backend: Box<dyn Backend> = match backend::resolve(requested, model) {
+        Ok(b) => b,
+        Err(checks) => {
+            print_no_backend(&checks);
+            return ExitCode::from(exit::NO_BACKEND);
         }
     };
+    eprintln!(
+        "ac-judge: backend={} model={}",
+        backend.name(),
+        backend.model()
+    );
 
     let prd_body = match fs::read_to_string(prd) {
         Ok(b) => b,
@@ -99,16 +153,34 @@ fn run(prd: &Path, crate_root: &Path, model: &str) -> ExitCode {
         return ExitCode::from(2);
     }
 
-    let crate_name = crate_root
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "unknown".to_owned());
-    let cache_dir = crate_root.join("target").join("autobuilder").join("ac-judge-cache");
-    let verdicts = build_verdicts(&pairs, crate_root, &api_key, model, &crate_name, &cache_dir);
+    let crate_name = crate_root.file_name().map_or_else(
+        || "unknown".to_owned(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let cache_dir = crate_root
+        .join("target")
+        .join("autobuilder")
+        .join("ac-judge-cache");
+    let verdicts = match build_verdicts(
+        &pairs,
+        crate_root,
+        backend.as_ref(),
+        &crate_name,
+        &cache_dir,
+    ) {
+        Ok(v) => v,
+        Err(msg) => {
+            // AC8: a strict-JSON-violating reply is a hard failure, not a
+            // conservative partial verdict — no receipt is written.
+            eprintln!("ac-judge: {msg}");
+            return ExitCode::from(2);
+        }
+    };
     let receipt = Receipt::new(
         prd.display().to_string(),
         crate_root.display().to_string(),
-        model.to_owned(),
+        backend.name(),
+        backend.model(),
         now_iso(),
         verdicts,
     );
@@ -128,7 +200,10 @@ fn run(prd: &Path, crate_root: &Path, model: &str) -> ExitCode {
     }
 
     if receipt.passed {
-        println!("ac-judge: all {} ACs passed the semantic judge", receipt.verdicts.len());
+        println!(
+            "ac-judge: all {} ACs passed the semantic judge",
+            receipt.verdicts.len()
+        );
         ExitCode::from(exit::PASS)
     } else {
         ExitCode::from(exit::AC_FAIL)
@@ -136,65 +211,72 @@ fn run(prd: &Path, crate_root: &Path, model: &str) -> ExitCode {
 }
 
 /// Build a verdict per pair. Unpaired ACs get the canonical no-test verdict.
-/// Paired ACs are sent to the Anthropic judge; transport errors produce a
-/// conservative `behavior_match: partial` verdict so a single flaky call
-/// doesn't block a run, but the error is surfaced in `reasoning`.
-#[allow(clippy::too_many_arguments)]
+/// Paired ACs are sent to the resolved backend.
+///
+/// A [`backend::Error::Transport`] failure (network/subprocess hiccup,
+/// including a per-call timeout) produces a conservative `behavior_match:
+/// partial` verdict so one flaky call doesn't block the whole run, with the
+/// error surfaced in `reasoning`. A [`backend::Error::BadResponse`] — the
+/// backend replied with something that is not the strict JSON verdict — is a
+/// hard failure per AC8: this returns `Err` immediately, naming the AC, and
+/// the caller writes no receipt at all.
 fn build_verdicts(
     pairs: &[Pair],
     crate_root: &Path,
-    api_key: &str,
-    model: &str,
+    backend: &dyn Backend,
     crate_name: &str,
     cache_dir: &Path,
-) -> Vec<Verdict> {
-    pairs
-        .iter()
-        .map(|p| {
-            let Some(ref test_abs) = p.test_path else {
-                return Verdict::unpaired(&p.ac.id);
-            };
-            let rel = test_abs
-                .strip_prefix(crate_root)
-                .unwrap_or(test_abs)
-                .display()
-                .to_string();
-            let test_source = match fs::read_to_string(test_abs) {
-                Ok(s) => s,
-                Err(e) => {
-                    return Verdict {
-                        ac_id: p.ac.id.clone(),
-                        test_path: Some(rel),
-                        behavior_match: ac_judge::schema::BehaviorMatch::Partial,
-                        assertion_kind: ac_judge::schema::AssertionKind::Mixed,
-                        confidence: 0.0,
-                        reasoning: format!("cannot read test file: {e}"),
-                    };
-                }
-            };
-            match judge_one_ac(
-                api_key,
-                model,
-                &p.ac.id,
-                &p.ac.text,
-                Some(&rel),
-                &test_source,
-                crate_name,
-                p.ac.index,
-                cache_dir,
-            ) {
-                Ok(v) => v,
-                Err(e) => Verdict {
+) -> Result<Vec<Verdict>, String> {
+    let mut out = Vec::with_capacity(pairs.len());
+    for p in pairs {
+        let Some(ref test_abs) = p.test_path else {
+            out.push(Verdict::unpaired(&p.ac.id));
+            continue;
+        };
+        let rel = test_abs
+            .strip_prefix(crate_root)
+            .unwrap_or(test_abs)
+            .display()
+            .to_string();
+        let test_source = match fs::read_to_string(test_abs) {
+            Ok(s) => s,
+            Err(e) => {
+                out.push(Verdict {
                     ac_id: p.ac.id.clone(),
                     test_path: Some(rel),
                     behavior_match: ac_judge::schema::BehaviorMatch::Partial,
                     assertion_kind: ac_judge::schema::AssertionKind::Mixed,
                     confidence: 0.0,
-                    reasoning: format!("judge call failed: {e}"),
-                },
+                    reasoning: format!("cannot read test file: {e}"),
+                });
+                continue;
             }
-        })
-        .collect()
+        };
+        match judge_one_ac(
+            backend,
+            &p.ac.id,
+            &p.ac.text,
+            Some(&rel),
+            &test_source,
+            crate_name,
+            p.ac.index,
+            cache_dir,
+        ) {
+            Ok(v) => out.push(v),
+            Err(backend::Error::BadResponse(m)) => {
+                return Err(format!("{}: bad response: {m}", p.ac.id));
+            }
+            Err(e) => out.push(Verdict {
+                ac_id: p.ac.id.clone(),
+                test_path: Some(rel),
+                behavior_match: ac_judge::schema::BehaviorMatch::Partial,
+                assertion_kind: ac_judge::schema::AssertionKind::Mixed,
+                confidence: 0.0,
+                reasoning: format!("judge call failed: {e}"),
+            }),
+        }
+    }
+    Ok(out)
 }
 
 fn write_receipt(crate_root: &Path, receipt: &Receipt) -> std::io::Result<()> {
@@ -206,10 +288,19 @@ fn write_receipt(crate_root: &Path, receipt: &Receipt) -> std::io::Result<()> {
     fs::write(path, json)
 }
 
-fn calibrate(golden_set: &Path) -> ExitCode {
-    // Load and validate the golden set first (offline — no API key needed yet).
-    // Exit 2 on malformed input so the caller can distinguish bad data from a
-    // deferred network gate.
+// `fpr`/`fnr` (false-positive/-negative rate) are the standard abbreviations
+// for these metrics; renaming one to dodge the similar-names lint would
+// obscure the pairing.
+#[allow(clippy::too_many_lines, clippy::similar_names)]
+fn calibrate(golden_set: &Path, backend_flag: &str, model: Option<&str>) -> ExitCode {
+    let requested = match parse_backend(backend_flag) {
+        Ok(r) => r,
+        Err(code) => return code,
+    };
+
+    // Load and validate the golden set first (offline — no backend needed
+    // yet). Exit 2 on malformed input so the caller can distinguish bad data
+    // from a deferred network gate.
     let pairs = match ac_judge::calibrate::load_golden_set(golden_set) {
         Ok(p) => p,
         Err(e) => {
@@ -230,20 +321,27 @@ fn calibrate(golden_set: &Path) -> ExitCode {
         counts.partial
     );
 
-    // The confusion-matrix gate requires a live API key.  When none is present
-    // the offline portion (loading + reporting the distribution) has already
-    // succeeded; exit 3 to signal "deferred — run with an API key to complete
-    // the network gate".
-    let api_key = match require_api_key() {
-        Ok(k) => k,
-        Err(_) => {
+    // The confusion-matrix gate requires a live backend. When none is
+    // available the offline portion (loading + reporting the distribution)
+    // has already succeeded; exit 3 to signal "deferred — run with a judge
+    // backend available to complete the network gate".
+    let backend: Box<dyn Backend> = match backend::resolve(requested, model) {
+        Ok(b) => b,
+        Err(checks) => {
             eprintln!(
-                "ac-judge: ${} is unset; confusion-matrix gate deferred (exit 3)",
-                api::API_KEY_ENV
+                "ac-judge: no judge backend available; confusion-matrix gate deferred (exit 3); checked:"
             );
+            for c in &checks {
+                eprintln!("  {c}");
+            }
             return ExitCode::from(3);
         }
     };
+    eprintln!(
+        "ac-judge: backend={} model={}",
+        backend.name(),
+        backend.model()
+    );
 
     // Run the judge against every golden pair and build the confusion matrix.
     let cache_dir = golden_set.join(".cache");
@@ -252,8 +350,7 @@ fn calibrate(golden_set: &Path) -> ExitCode {
         let ac_id = format!("AC{}", i + 1);
         eprint!("  judging {} ({}/{})... ", gp.id, i + 1, pairs.len());
         let verdict = match judge_one_ac(
-            &api_key,
-            DEFAULT_MODEL,
+            backend.as_ref(),
             &ac_id,
             &gp.ac_text,
             None,
@@ -322,6 +419,10 @@ fn show(slug: &str, crate_root: &Path) -> ExitCode {
     };
     match serde_json::to_string_pretty(verdict) {
         Ok(pretty) => {
+            println!(
+                "ac-judge show: backend={} model={}",
+                receipt.backend, receipt.model
+            );
             println!("{pretty}");
             ExitCode::from(exit::PASS)
         }

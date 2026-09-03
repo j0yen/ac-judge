@@ -29,5 +29,8 @@ fn acceptance_ac1() {
     let out = Command::new(bin).arg("--help").output().unwrap();
     assert!(out.status.success(), "binary must expose --help");
     let help = String::from_utf8_lossy(&out.stdout);
-    assert!(help.contains("run"), "the run subcommand must be advertised");
+    assert!(
+        help.contains("run"),
+        "the run subcommand must be advertised"
+    );
 }
