@@ -14,6 +14,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::pair;
+
 /// The expected label for a golden pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Label {
@@ -49,6 +51,12 @@ impl Label {
 /// carries the AC's English text, the full source of the paired test, and the
 /// human label. The judge is run against `ac_text` + `test_source`; the verdict
 /// is then scored against `label` to fill the confusion matrix.
+///
+/// `ac_text` may be authored as plain English (the historical golden-set
+/// format), a `**AC1**: ...` bullet, or a `1. P0 — ...` numbered line — all
+/// three normalize to the same clean text via [`pair::extract_ac_text`] (see
+/// [`load_golden_set`]), so rewriting a golden set from one form to another
+/// does not change what the judge is shown.
 #[derive(Debug, Clone, Deserialize)]
 pub struct GoldenPair {
     /// Stable identifier for the pair (filename stem when not set in the file).
@@ -71,9 +79,12 @@ where
     Label::parse(&s).map_err(serde::de::Error::custom)
 }
 
-/// Load every `*.json` golden pair under `dir`, sorted by filename for
-/// determinism. A pair's `id` defaults to its filename stem when the file
-/// omits one.
+/// Load every `*.json` golden pair under `dir`, sorted by filename.
+///
+/// A pair's `id` defaults to its filename stem when the file omits one.
+/// `ac_text` is run through [`pair::extract_ac_text`] — the same parser
+/// that reads PRDs — so a golden pair authored in the bullet or numbered
+/// form scores identically to one authored as plain text.
 ///
 /// # Errors
 /// Returns `Err` if the directory cannot be read, a file is not valid JSON, or
@@ -99,6 +110,8 @@ pub fn load_golden_set(dir: &Path) -> Result<Vec<GoldenPair>, String> {
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
         }
+        let (_level, text) = pair::extract_ac_text(&pair.ac_text);
+        pair.ac_text = text;
         pairs.push(pair);
     }
     Ok(pairs)

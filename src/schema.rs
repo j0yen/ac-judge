@@ -41,6 +41,12 @@ pub struct Verdict {
     /// when the AC is unpaired.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_path: Option<String>,
+    /// The AC's declared priority level (`P0`/`P1`/`P2`), carried through
+    /// from [`crate::pair::Ac::level`] when the source PRD's numbered
+    /// contract form declared one. Absent for the older `**AC<N>**` bullet
+    /// form and for receipts written before this field existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<String>,
     /// Whether the test exercises the AC's behavior.
     pub behavior_match: BehaviorMatch,
     /// What kind of assertion the test makes.
@@ -58,6 +64,7 @@ impl Verdict {
         Self {
             ac_id: ac_id.into(),
             test_path: None,
+            level: None,
             behavior_match: BehaviorMatch::No,
             assertion_kind: AssertionKind::None,
             confidence: 1.0,

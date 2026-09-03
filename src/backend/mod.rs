@@ -308,6 +308,10 @@ pub fn parse_verdict(
     Ok(crate::schema::Verdict {
         ac_id: ac_id.to_owned(),
         test_path,
+        // The backend never knows an AC's level — it judges test source
+        // against AC text only. The caller (`main::build_verdicts`) fills
+        // this in from the parsed `Ac` after the call returns.
+        level: None,
         behavior_match: raw.behavior_match,
         assertion_kind: raw.assertion_kind,
         confidence: raw.confidence,

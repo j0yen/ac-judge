@@ -129,6 +129,7 @@ fn regex_lite(pat: &str) -> impl Fn(&str) -> bool + '_ {
         "^AC[0-9]+$" => s
             .strip_prefix("AC")
             .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())),
+        "^P[0-2]$" => matches!(s, "P0" | "P1" | "P2"),
         other => panic!("unhandled test pattern {other}"),
     }
 }
@@ -145,6 +146,7 @@ fn acceptance_ac9() {
         Verdict {
             ac_id: "AC1".to_owned(),
             test_path: Some("tests/ac1_basic.rs".to_owned()),
+            level: Some("P0".to_owned()),
             behavior_match: BehaviorMatch::Yes,
             assertion_kind: AssertionKind::AssertsInvariant,
             confidence: 0.92,
@@ -153,6 +155,7 @@ fn acceptance_ac9() {
         Verdict {
             ac_id: "AC2".to_owned(),
             test_path: Some("tests/ac2_x.rs".to_owned()),
+            level: Some("P1".to_owned()),
             behavior_match: BehaviorMatch::Partial,
             assertion_kind: AssertionKind::Mixed,
             confidence: 0.5,

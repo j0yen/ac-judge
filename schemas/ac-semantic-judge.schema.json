@@ -38,6 +38,7 @@
       "properties": {
         "ac_id": { "type": "string", "pattern": "^AC[0-9]+$" },
         "test_path": { "type": "string" },
+        "level": { "type": "string", "pattern": "^P[0-2]$" },
         "behavior_match": { "enum": ["yes", "no", "partial"] },
         "assertion_kind": { "enum": ["asserts-invariant", "restates-impl", "mixed", "none"] },
         "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },

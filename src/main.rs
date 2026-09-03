@@ -149,7 +149,11 @@ fn run(prd: &Path, crate_root: &Path, backend_flag: &str, model: Option<&str>) -
         }
     };
     if pairs.is_empty() {
-        eprintln!("ac-judge: no ACs found in {}", prd.display());
+        eprintln!(
+            "ac-judge: no ACs found in {} — expected `**AC<N>**: ...` bullets, \
+             or numbered lines like `N. P0 — ...` under a `## Acceptance criteria` heading",
+            prd.display()
+        );
         return ExitCode::from(2);
     }
 
@@ -230,7 +234,9 @@ fn build_verdicts(
     let mut out = Vec::with_capacity(pairs.len());
     for p in pairs {
         let Some(ref test_abs) = p.test_path else {
-            out.push(Verdict::unpaired(&p.ac.id));
+            let mut v = Verdict::unpaired(&p.ac.id);
+            v.level.clone_from(&p.ac.level);
+            out.push(v);
             continue;
         };
         let rel = test_abs
@@ -244,6 +250,7 @@ fn build_verdicts(
                 out.push(Verdict {
                     ac_id: p.ac.id.clone(),
                     test_path: Some(rel),
+                    level: p.ac.level.clone(),
                     behavior_match: ac_judge::schema::BehaviorMatch::Partial,
                     assertion_kind: ac_judge::schema::AssertionKind::Mixed,
                     confidence: 0.0,
@@ -262,13 +269,17 @@ fn build_verdicts(
             p.ac.index,
             cache_dir,
         ) {
-            Ok(v) => out.push(v),
+            Ok(mut v) => {
+                v.level.clone_from(&p.ac.level);
+                out.push(v);
+            }
             Err(backend::Error::BadResponse(m)) => {
                 return Err(format!("{}: bad response: {m}", p.ac.id));
             }
             Err(e) => out.push(Verdict {
                 ac_id: p.ac.id.clone(),
                 test_path: Some(rel),
+                level: p.ac.level.clone(),
                 behavior_match: ac_judge::schema::BehaviorMatch::Partial,
                 assertion_kind: ac_judge::schema::AssertionKind::Mixed,
                 confidence: 0.0,
@@ -419,8 +430,12 @@ fn show(slug: &str, crate_root: &Path) -> ExitCode {
     };
     match serde_json::to_string_pretty(verdict) {
         Ok(pretty) => {
+            let level_suffix = verdict
+                .level
+                .as_deref()
+                .map_or_else(String::new, |l| format!(" level={l}"));
             println!(
-                "ac-judge show: backend={} model={}",
+                "ac-judge show: backend={} model={}{level_suffix}",
                 receipt.backend, receipt.model
             );
             println!("{pretty}");

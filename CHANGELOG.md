@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.1 — 2026-09-03
+
+`ac-judge` today only recognized acceptance criteria written as `**AC<N>**: …`
+bullets and only paired them with tests named `ac<N>_*.rs` / `acceptance_ac<N>.rs`
+/ `fn ac<N>_`. Every PRD in this workspace follows the `/build` contract instead —
+a numbered list under `## Acceptance criteria` with lines like
+`1. P0 — Given …, When …, Then …` — and rustbuild's own scaffold convention writes
+tests as `tests/ac01_*.rs` (zero-padded). The judge therefore reported "no ACs
+found" (exit 2) on contract-form PRDs and would have paired nothing even if it
+parsed them. This patch teaches `parse_acs` the contract form (section-scoped,
+level prefix captured), keeps the old form working, and makes the three pairing
+heuristics accept zero-padded indices. No change to the prompt, backends, cache,
+or pass/fail rule. Verdicts and the receipt schema gain an optional `level`
+field (`P0`/`P1`/`P2`); `ac-judge show` prints it when present.
+
 ## v0.2.0 — 2026-09-03
 
 `ac-judge run` gains `--backend auto|codex|api|claude-cli` (default `auto`).
