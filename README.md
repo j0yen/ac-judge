@@ -11,6 +11,10 @@ It pairs each AC with its test, sends both to Claude (`claude-sonnet-4-6` by def
 
 The judge model is deliberately a different family from the autobuilder's default (Opus). The model that wrote a test should not be the one deciding whether that test verifies its AC — the independence is the whole point.
 
+## Recent
+
+- `--backend auto|codex|api|claude-cli` (default `auto`): the judge now resolves codex (`codex exec`, preferred — a different model family from the Claude implementer) first, then the Anthropic API (`$ANTHROPIC_API_KEY`), then `claude login`'s headless CLI (`claude -p`) as the last resort. An explicit `--backend` never substitutes another one; the receipt records which backend and model actually judged.
+
 ## Install
 
 ```sh
@@ -36,7 +40,7 @@ ac-judge show --slug AC1 --crate-root <path/to/crate>
 
 - `0` — every AC passed the judge.
 - `4` — an AC failed the gate: `behavior_match: no`, or `assertion_kind: restates-impl` with `confidence >= 0.7`.
-- `6` — `$ANTHROPIC_API_KEY` is unset. The check runs before any network call, so a missing key never costs a request.
+- `6` — no judge backend available (`codex login`, `$ANTHROPIC_API_KEY`, and `claude login` were all checked and none worked, or the single explicitly `--backend`-requested one didn't). The check runs before any network call, so an unavailable backend never costs a request.
 
 ## How pairing works
 
