@@ -11,7 +11,18 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::doc_markdown,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::as_conversions,
+    clippy::cognitive_complexity,
+    clippy::option_if_let_else,
+    clippy::float_cmp,
+    clippy::float_arithmetic
+)]
 
 use std::ffi::OsStr;
 use std::fs;

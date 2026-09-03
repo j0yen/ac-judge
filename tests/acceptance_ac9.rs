@@ -11,7 +11,18 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::doc_markdown,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::as_conversions,
+    clippy::cognitive_complexity,
+    clippy::option_if_let_else,
+    clippy::float_cmp,
+    clippy::float_arithmetic
+)]
 
 use std::collections::BTreeSet;
 
@@ -20,7 +31,10 @@ use serde_json::Value;
 
 /// Load the shipped schema next to this crate.
 fn load_schema() -> Value {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/schemas/ac-semantic-judge.schema.json");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/schemas/ac-semantic-judge.schema.json"
+    );
     let body = std::fs::read_to_string(path).expect("schema file present in repo");
     serde_json::from_str(&body).expect("schema is valid JSON")
 }
@@ -112,10 +126,9 @@ fn validate(instance: &Value, schema: &Value, defs: &Value) {
 /// (`^AC[0-9]+$`). Avoids a regex dependency in the test.
 fn regex_lite(pat: &str) -> impl Fn(&str) -> bool + '_ {
     move |s: &str| match pat {
-        "^AC[0-9]+$" => {
-            s.strip_prefix("AC")
-                .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
-        }
+        "^AC[0-9]+$" => s
+            .strip_prefix("AC")
+            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())),
         other => panic!("unhandled test pattern {other}"),
     }
 }
@@ -150,6 +163,7 @@ fn acceptance_ac9() {
     let receipt = Receipt::new(
         "/tmp/PRD.md",
         "/tmp/crate",
+        "api",
         "claude-sonnet-4-6",
         "2026-05-29T00:00:00Z",
         verdicts,
@@ -161,5 +175,8 @@ fn acceptance_ac9() {
     // Sanity: the unpaired verdict serialized without a test_path key
     // (skip_serializing_if), which the schema permits (test_path optional).
     let ac3 = instance["verdicts"][2].clone();
-    assert!(ac3.get("test_path").is_none(), "unpaired verdict omits test_path");
+    assert!(
+        ac3.get("test_path").is_none(),
+        "unpaired verdict omits test_path"
+    );
 }

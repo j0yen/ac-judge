@@ -11,7 +11,18 @@
 //! the panic stub with a real assertion that verifies the AC
 //! description above.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::doc_markdown,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::as_conversions,
+    clippy::cognitive_complexity,
+    clippy::option_if_let_else,
+    clippy::float_cmp,
+    clippy::float_arithmetic
+)]
 
 use std::fs;
 use std::process::Command;
@@ -21,10 +32,14 @@ use tempfile::tempdir;
 /// AC5 — an AC with no paired test yields a `behavior_match: no` verdict with
 /// reason "no paired test found", and the run exits 4.
 ///
-/// Pure pair-detection + verdict assembly, no network. We invoke the real
-/// binary with a non-empty (fake) API key so the AC8 key guard does not
-/// short-circuit; the paired AC is recorded as a deferred (partial) verdict
-/// with no network call, and the unpaired AC fails the gate.
+/// Pure pair-detection + verdict assembly. We invoke the real binary with a
+/// non-empty (fake) API key so the exit-6 no-backend guard does not
+/// short-circuit; `codex`/`claude` are pointed at nonexistent paths and
+/// `AC_JUDGE_API_ENDPOINT` at a local port nothing listens on, so `auto`
+/// resolution lands on the `api` backend and its one call fails fast against
+/// loopback (connection refused) rather than touching the real network. The
+/// paired AC is recorded as a deferred (partial) verdict from that failed
+/// call, and the unpaired AC fails the gate.
 #[test]
 fn acceptance_ac5() {
     let dir = tempdir().unwrap();
@@ -46,6 +61,9 @@ fn acceptance_ac5() {
         .arg("--crate-root")
         .arg(root)
         .env("ANTHROPIC_API_KEY", "sk-test-not-real")
+        .env("AC_JUDGE_API_ENDPOINT", "http://127.0.0.1:1/v1/messages")
+        .env("AC_JUDGE_CODEX_BIN", "/nonexistent/ac-judge-test-codex")
+        .env("AC_JUDGE_CLAUDE_BIN", "/nonexistent/ac-judge-test-claude")
         .output()
         .unwrap();
 

@@ -13,12 +13,23 @@
 //! change an AC, file agent/intent_card_amendment_request.json and re-scaffold.
 //! The `fn acceptance_ac6` body BELOW is owned by the edit-agent.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown, clippy::indexing_slicing, clippy::panic, clippy::as_conversions, clippy::cognitive_complexity, clippy::option_if_let_else, clippy::float_cmp, clippy::float_arithmetic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::doc_markdown,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::as_conversions,
+    clippy::cognitive_complexity,
+    clippy::option_if_let_else,
+    clippy::float_cmp,
+    clippy::float_arithmetic
+)]
 
 use std::path::PathBuf;
 use std::process::Command;
 
-use ac_judge::calibrate::{load_golden_set, Label, LabelCounts};
+use ac_judge::calibrate::{Label, LabelCounts, load_golden_set};
 
 /// Path to the shipped golden set, relative to the crate root.
 fn golden_dir() -> PathBuf {
@@ -43,7 +54,11 @@ fn acceptance_ac6_golden_set_distribution() {
     let mut ids = std::collections::HashSet::new();
     for p in &pairs {
         assert!(!p.ac_text.trim().is_empty(), "{}: empty ac_text", p.id);
-        assert!(!p.test_source.trim().is_empty(), "{}: empty test_source", p.id);
+        assert!(
+            !p.test_source.trim().is_empty(),
+            "{}: empty test_source",
+            p.id
+        );
         assert!(ids.insert(p.id.clone()), "duplicate golden id {}", p.id);
         // Label round-trips through the parser.
         let s = match p.label {
@@ -56,9 +71,11 @@ fn acceptance_ac6_golden_set_distribution() {
 }
 
 /// AC6 — the `calibrate` subcommand loads + validates the golden set offline
-/// (no API key set, so no network call may be attempted) and reports the count
-/// summary. The confusion-matrix gate itself is deferred (exit 3) until the
-/// network iteration.
+/// (no judge backend available, so no network call may be attempted) and
+/// reports the count summary. The confusion-matrix gate itself is deferred
+/// (exit 3) until a backend is available. `codex`/`claude` are pointed at
+/// nonexistent paths so this is hermetic regardless of what is installed and
+/// logged in on the host (RedBaron carries both).
 #[test]
 fn acceptance_ac6_calibrate_command_validates_offline() {
     let bin = env!("CARGO_BIN_EXE_ac-judge");
@@ -66,6 +83,8 @@ fn acceptance_ac6_calibrate_command_validates_offline() {
         .args(["calibrate", "--golden-set"])
         .arg(golden_dir())
         .env_remove("ANTHROPIC_API_KEY")
+        .env("AC_JUDGE_CODEX_BIN", "/nonexistent/ac-judge-test-codex")
+        .env("AC_JUDGE_CLAUDE_BIN", "/nonexistent/ac-judge-test-claude")
         .output()
         .unwrap();
 

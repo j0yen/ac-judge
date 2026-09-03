@@ -19,12 +19,16 @@ use std::time::Instant;
 
 use tempfile::tempdir;
 
-/// AC8 — a missing `$ANTHROPIC_API_KEY` makes `ac-judge run` exit 6
-/// immediately, attempting no network call.
+/// AC8 — no available judge backend makes `ac-judge run` exit 6 immediately,
+/// attempting no network call.
 ///
-/// We assert the exit code is 6 and that the run returns near-instantly
-/// (well under any network round-trip), which together evidence "no network
-/// call attempted": the key guard short-circuits before the client is built.
+/// `$ANTHROPIC_API_KEY` is unset, and `codex`/`claude` are pointed at
+/// nonexistent paths so the test is hermetic regardless of what is actually
+/// installed and logged in on the host (RedBaron carries both). We assert
+/// the exit code is 6 and that the run returns near-instantly (well under
+/// any network round-trip or subprocess spawn), which together evidence "no
+/// network call attempted": the backend-resolution guard short-circuits
+/// before any client is built.
 #[test]
 fn acceptance_ac8() {
     let dir = tempdir().unwrap();
@@ -42,6 +46,8 @@ fn acceptance_ac8() {
         .arg("--crate-root")
         .arg(root)
         .env_remove("ANTHROPIC_API_KEY")
+        .env("AC_JUDGE_CODEX_BIN", "/nonexistent/ac-judge-test-codex")
+        .env("AC_JUDGE_CLAUDE_BIN", "/nonexistent/ac-judge-test-claude")
         .output()
         .unwrap();
     let elapsed = start.elapsed();
@@ -60,7 +66,9 @@ fn acceptance_ac8() {
     );
     // And no receipt should have been written (we never got past the guard).
     assert!(
-        !root.join("target/autobuilder/ac-semantic-judge.json").exists(),
+        !root
+            .join("target/autobuilder/ac-semantic-judge.json")
+            .exists(),
         "no receipt should be written when the key is missing"
     );
 }
